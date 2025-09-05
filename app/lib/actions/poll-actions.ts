@@ -46,7 +46,7 @@ export async function createPoll(formData: FormData) {
   });
 
   if (!validation.success) {
-    return { error: validation.error.errors[0].message };
+    return { error: validation.error.issues[0].message };
   }
 
   const { question: validQuestion, options: validOptions } = validation.data;
@@ -121,7 +121,7 @@ export async function submitVote(pollId: string, optionIndex: number) {
   // Validate input
   const validation = voteSchema.safeParse({ pollId, optionIndex });
   if (!validation.success) {
-    return { error: validation.error.errors[0].message };
+    return { error: validation.error.issues[0].message };
   }
 
   const {
