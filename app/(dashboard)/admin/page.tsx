@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -11,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { deletePoll } from "@/app/lib/actions/poll-actions";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentUser } from "@/app/lib/actions/auth-actions";
 
 interface Poll {
   id: string;
@@ -20,14 +22,49 @@ interface Poll {
   options: string[];
 }
 
+// Admin user emails from environment variables
+const ADMIN_EMAILS = process.env.ADMIN_EMAILS?.split(",") || [
+  "admin@example.com",
+  "admin@alx-polly.com",
+];
+
 export default function AdminPage() {
   const [polls, setPolls] = useState<Poll[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true);
+  const router = useRouter();
 
   useEffect(() => {
-    fetchAllPolls();
+    checkAdminAccess();
   }, []);
+
+  const checkAdminAccess = async () => {
+    try {
+      const user = await getCurrentUser();
+
+      if (!user) {
+        router.push("/login");
+        return;
+      }
+
+      // Check if user is admin
+      const userIsAdmin = ADMIN_EMAILS.includes(user.email || "");
+
+      if (!userIsAdmin) {
+        router.push("/polls");
+        return;
+      }
+
+      setIsAdmin(true);
+      setAuthLoading(false);
+      fetchAllPolls();
+    } catch (error) {
+      console.error("Admin access check failed:", error);
+      router.push("/login");
+    }
+  };
 
   const fetchAllPolls = async () => {
     const supabase = createClient();
@@ -54,6 +91,14 @@ export default function AdminPage() {
     setDeleteLoading(null);
   };
 
+  if (authLoading) {
+    return <div className="p-6">Checking admin access...</div>;
+  }
+
+  if (!isAdmin) {
+    return <div className="p-6">Access denied. Admin privileges required.</div>;
+  }
+
   if (loading) {
     return <div className="p-6">Loading all polls...</div>;
   }
@@ -64,6 +109,9 @@ export default function AdminPage() {
         <h1 className="text-2xl font-bold">Admin Panel</h1>
         <p className="text-gray-600 mt-2">
           View and manage all polls in the system.
+        </p>
+        <p className="text-sm text-red-600 mt-1">
+          ⚠️ Admin access - use with caution
         </p>
       </div>
 

@@ -1,0 +1,175 @@
+name: Security Checks
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run security checks daily at 2 AM UTC
+    - cron: '0 2 * * *'
+
+jobs:
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Run npm audit
+      run: npm audit --audit-level=moderate
+      
+    - name: Run security tests
+      run: npm run test:security
+      
+    - name: Build application
+      run: npm run build
+      
+    - name: Run TypeScript check
+      run: npm run tsc
+      
+  dependency-check:
+    name: Dependency Security Check
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Check for known vulnerabilities
+      run: |
+        npm audit --audit-level=high --production
+        if [ $? -ne 0 ]; then
+          echo "High or critical vulnerabilities found!"
+          exit 1
+        fi
+        
+  code-quality:
+    name: Code Quality & Linting
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Run ESLint
+      run: npm run lint
+      
+    - name: Check for hardcoded secrets
+      run: |
+        echo "Checking for potential secrets..."
+        if grep -r -i "password\s*=\s*['\"][^'\"]*['\"]" --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx" .; then
+          echo "Potential hardcoded passwords found!"
+          exit 1
+        fi
+        if grep -r -i "api[_-]?key\s*=\s*['\"][^'\"]*['\"]" --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx" .; then
+          echo "Potential hardcoded API keys found!"
+          exit 1
+        fi
+        if grep -r -i "secret\s*=\s*['\"][^'\"]*['\"]" --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx" .; then
+          echo "Potential hardcoded secrets found!"
+          exit 1
+        fi
+        echo "No obvious hardcoded secrets found."
+        
+  test-coverage:
+    name: Test Coverage
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Run all tests
+      run: npm test
+      
+    - name: Generate coverage report
+      run: npm test -- --coverage
+      
+  security-headers-check:
+    name: Security Headers Check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Build and start application
+      run: |
+        npm run build
+        npm start &
+        sleep 10
+        
+    - name: Check security headers
+      run: |
+        echo "Checking security headers..."
+        response=$(curl -s -I http://localhost:3000)
+        
+        if echo "$response" | grep -i "x-frame-options"; then
+          echo "✓ X-Frame-Options header found"
+        else
+          echo "✗ X-Frame-Options header missing"
+          exit 1
+        fi
+        
+        if echo "$response" | grep -i "x-content-type-options"; then
+          echo "✓ X-Content-Type-Options header found"
+        else
+          echo "✗ X-Content-Type-Options header missing"
+          exit 1
+        fi
+        
+        if echo "$response" | grep -i "content-security-policy"; then
+          echo "✓ Content-Security-Policy header found"
+        else
+          echo "✗ Content-Security-Policy header missing"
+          exit 1
+        fi
